@@ -1,140 +1,220 @@
-import numpy as np
-from itertools import combinations
-import os
-from random import randint
+import sys, os
 
-from Data import Board, BoardUtils, Cell, Tests
+from Data import Board
 
 class Solve:
     def __init__(self):
-        self.digits = {1, 2, 3, 4, 5, 6, 7, 8, 9}
+
+        # How many iterations before the puzzle is solved.
+        self.possible_values = {i for i in range(1, 10)}
+        self.recursive_counter = 0
+        self.hidden_singles_counter = 0
+        self.naked_singles_counter = 0
+        self.locked_candidates_counter = 0
+
+
+        self.changed_cells = []
+        self.invalid = False
+
+        self.max_recursions = 100_000
+    
+    @property
+    def total_counter(self):
+        return self.recursive_counter + self.naked_singles_counter + self.hidden_singles_counter + self.locked_candidates_counter
+    def blockPrint(self):
+        sys.stdout = open(os.devnull, 'w')
+
+    def enablePrint(self):
+        sys.stdout = sys.__stdout__
+
+    def display_counters(self):
+        print(f"Number of recursions: {self.recursive_counter}")
+        print(f"Number of naked singles: {self.naked_singles_counter}")
+        print(f"Number of hidden singles: {self.hidden_singles_counter}")
+        print(f"Number of locked candidates found: {self.locked_candidates_counter}")
+        print(f"Total iterations: {self.total_counter}")
 
     def hidden_single(self, board: Board) -> bool:
+
         """
-        Implements the Hidden Single technique: when a candidate appears only once in a unit, it must be placed in the
-        cell where it appears.
-        """
-        changed = False
-        for unit in board.unit_list:
-            for digit in range(1, 10):
-                digit_places = [cell for cell in unit if isinstance(cell, Cell) and digit in cell.candidates]
-                if len(digit_places) == 1:
-                    digit_places[0].num = digit
-                    changed = True
-        return changed
-    
-    def unique_candidate(self, board: Board) -> bool:
-        """
-        Implements the Unique Candidate technique: when a digit can only be placed in one cell in a unit, that digit
-        must be placed in that cell. A unit can be a row, column, or box.
+        Implements the Hidden Single technique: when a row, col or box has a cell with only one candidate, it will be filled.
+
+        We want this method to look through the candidates of each row, column and block. If it finds a value in a candidates set that is unique,
+        it changes the value of the cell t
         """
 
-
+        
         changed = False
-        for unit in board.row_list + board.col_list + board.box_list:
-            for digit in self.digits:
-                digit_places = [cell for cell in unit if cell.has_candidate(digit)]
-                if len(digit_places) == 1:
-                    cell = digit_places[0]
-                    if cell.num == 0:
-                        cell.num = digit
-                        changed = True
+
+        print("going into hidden_single")
+
+        # candidate_list = [cell.candidates for cell in board.board[empty_cell[0] if cell != 0 or cell is empty_cell]]
+
+        next_empty_pos = board.find_empty_cell()
+        row = board.board[next_empty_pos[0], :]
+
+
+        # Check row for hidden single
+
+        candidate_list = []
+
+        for cell in row:
+
+            if cell == 0:
+                candidate_list.append(cell)
+
+        if board.get_potential_hidden_single(candidate_list) is not None:
+
+            hidden_single, candidate = board.get_potential_hidden_single(candidate_list)
+
+            print(f"Found potential hidden single: {candidate} {hidden_single.info}")
+
+        else:
+
+            # If there are no potential hidden singles in the row then 
+            # it won't matter if we find them in the columns or blocks.
+            # lets leave.
+            print("No hidden single found")
+            return False
+
+        candidate_list = []
+
+        # fill candidate list amongst column and blocks
+
+        # Column first.
+
+        for cell in board.board[:, next_empty_pos[1]]:
+            if cell == 0 and cell is not hidden_single:
+                candidate_list.append(cell)
+
+        block = board.blocks[hidden_single.block]
+
+        for cell in block.flatten():
+            if cell == 0 and cell is not hidden_single:
+                candidate_list.append(cell)
+
+        print(f"Comparing to: {[cell.candidates for cell in candidate_list]}")
+        # Compare candidates in row and block to see if the potential candidate is truly unique amongst its unit.
+
+        if board.is_unique_candidate(candidate_list, hidden_single, candidate):
+            print(f"Hidden Single Found!\n{hidden_single.info}")
+            print(f"Assigning value: {candidate}")
+
+            
+            board.set_num(hidden_single, candidate)
+
+            if self.check_candidate_lengths(board):
+                print("Board found to be invalid!")
+                board.set_num(cell, 0)
+                
+                
+            else:
+                self.changed_cells.append(hidden_single)
+                changed = True
+
+        if not changed:
+            print("Candidate was not unique")
+
         return changed
+                    
     def naked_single(self, board: Board) -> bool:
+
         """
         Implements the Naked Single technique: when a cell has only one candidate, that candidate must be placed in
         that cell.
         """
         changed = False
-        for row in board.board:
+
+        print("Checking for naked singles")
+        for idx, row in enumerate(board.board):
+
+            if self.invalid or changed:
+                    break
+            print(f"row: {idx} (naked single)")
+
+            # Go through each row to find an empty cell with only one candidate.
+            
+            board.fill_blacklist(row[0])
+
             for cell in row:
-                if isinstance(cell, Cell) and cell.num == 0 and len(cell.candidates) == 1:
-                    cell.num = list(cell.candidates)[0]
-                    changed = True
+
+                if cell == 0 and len(cell.candidates) == 1:
+
+                    candidate = list(cell.candidates)[0]
+
+                    print(f"Naked Single found: {candidate} {cell.info}")
+                    print(f"Setting value {candidate}")
+
+                    board.set_num(cell, candidate)
+
+                    # If we have set the number and an empty cell on the board loses all its candidates then this is the wrong number.
+                    
+                    # im pretty sure this also means that we should backtrack in the recursion because the value placed by
+                    # naked_single will only lead to an invalid board if the board was invalid before naked_single placed the value.
+                    # This is because naked_single must find the only potential value for an empty cell and if that leads to an 
+                    # invalid board then the board was invalid already.
+
+                    if self.check_candidate_lengths(board):
+                        print("Board found to be invalid!")
+                        self.invalid = True
+                        board.set_num(cell, 0)
+                        break
+                        
+                    else:
+
+                        self.changed_cells.append(cell)
+                        changed = True
+
+                        self.naked_singles_counter +=1
+                        break
+
+        if not changed: print("No naked Singles found.")
+                    
         return changed
-    
-    def hidden_pair(self, board: Board) -> bool:
+
+    def locked_candidates(self, board: Board) -> bool:
         """
-        Implements the Hidden Pair technique: if two cells in a unit have the same pair of candidates, then no other
-        cells in that unit can have those candidates.
+        Implements the Locked Candidates technique: if a candidate value is restricted to one row or column within a
+        particular block, then that candidate can be removed from the candidates of all other cells in that row or column.
         """
         changed = False
-        for unit in board.row_list + board.col_list + board.box_list:
-            # Find pairs of cells that have the same two candidates
-            pairs = [pair for pair in combinations(unit, 2) if pair[0].candidates() == pair[1].candidates() == 2]
-            # If there are at least two pairs, try to remove the candidates from the other cells in the unit
-            if len(pairs) > 1:
-                for other_cell in unit:
-                    if other_cell not in pairs:
-                        old_candidates = other_cell.candidates()
-                        new_candidates = old_candidates - set.union(*[set(cell.candidates()) for cell in pairs])  
-                        if new_candidates != old_candidates:
-                            other_cell.set_candidates(new_candidates)
-                            changed = True
-        return changed
-    
-    def hidden_triple(self, board: Board) -> bool:
-        """
-        Implements the Hidden Triple technique: if three cells in a unit have the same three candidates, then no other
-        cells in that unit can have those candidates.
-        """
-        changed = False
-        for unit in board.row_list + board.col_list + board.box_list:
-            # Find triples of cells that have the same three candidates
-            triples = [triple for triple in combinations(unit, 3) if triple[0].candidates() == triple[1].candidates() == triple[2].candidates() == 3]
-            # If there are at least three triples, try to remove the candidates from the other cells in the unit
-            if len(triples) > 2:
-                for other_cell in unit:
-                    if other_cell not in triples:
-                        old_candidates = other_cell.candidates()
-                        new_candidates = old_candidates - set.union(*[set(cell.candidates()) for cell in triples])  
-                        if new_candidates != old_candidates:
-                            other_cell.set_candidates(new_candidates)
-                            changed = True
-        return changed
-    
-    def hidden_quad(self, board: Board) -> bool:
-        """
-        Implements the Hidden Quad technique: if four cells in a unit have the same four candidates, then no other
-        cells in that unit can have those candidates.
-        """
-        changed = False
-        for unit in board.row_list + board.col_list + board.box_list:
-            # Find quads of cells that have the same four candidates
-            quads = [quad for quad in combinations(unit, 4) if quad[0].candidates() == quad[1].candidates() == quad[2].candidates() == quad[3].candidates() == 4]
-            # If there are at least four quads, try to remove the candidates from the other cells in the unit
-            if len(quads) > 3:
-                for other_cell in unit:
-                    if other_cell not in quads:
-                        old_candidates = other_cell.candidates()
-                        new_candidates = old_candidates - set.union(*[set(cell.candidates()) for cell in quads])  
-                        if new_candidates != old_candidates:
-                            other_cell.set_candidates(new_candidates)
-                            changed = True
+        
         return changed
 
     def num_allowed(self, board: Board, row: int, col: int, num: int) -> bool:
         """
         Determines if a given digit can be placed in a given cell without violating any of the rules of Sudoku.
         """
+
+        NOT_ALLOWED_STRING = f"num_allowed did not approve of the number {num} for cell ({row}, {col})"
         # Check if the digit is in the same row or column
         if num in board.board[row, :]:
+            print(NOT_ALLOWED_STRING + "(Same number in row)")
             return False
+            
         if num in board.board[:, col]:
+            print(NOT_ALLOWED_STRING + "(Same number in column)")
             return False
 
-        # Check if the digit is in the same 3x3 box
-        box_row = (row // 3) * 3
-        box_col = (col // 3) * 3
-        if num in board.board[box_row:box_row+3, box_col:box_col+3]:
+        blockID = board.board[row][col].block
+
+        block = board.blocks[blockID]
+
+        if num in block.flatten():
+            print(NOT_ALLOWED_STRING + "(Same number in block)")
             return False
+            
+        print(f"{num} is allowed for cell ({row}, {col}) (num_allowed)")
+        print(board)
 
         return True
     
     def is_solved(self, board: Board):
         # Check if all cells have a non-zero number
-        if np.count_nonzero(board.board) < 81:
-            return False
+        for row in board.board:
+            for cell in row:
+                if cell == 0:
+                    return False
 
         # Check each row for duplicates
         for row in range(9):
@@ -154,137 +234,94 @@ class Solve:
                     return False
 
         return True
+    def check_candidate_lengths(self, board: Board):
 
-    def fill_board(self, row, col, board: Board):
+        """
+        This method checks every empty cell on the board to see if it has any candidates.
+        If it has no candidates then self.invalid = True.
+        """
+        
+        for row in board.board:
+            for cell in row:
 
-        print(board.board)
-        while self.unique_candidate(board) or self.hidden_single(board) or self.naked_single(board) or self.hidden_pair(board) or self.hidden_triple(board) or self.hidden_quad(board):
+                # If cell is empty and has no candidates then the board is invalid.
+                if cell == 0 and len(cell.candidates) == 0:
+                    print(f"Found an invalid board with cell ({cell.row}, {cell.col}): {cell.candidates}")
+                    print(board)
+                    self.invalid = True
+                    return self.invalid
+                
+        self.invalid = False
+
+        return self.invalid
+
+    def recursive_solve(self, board: Board):
+
+        self.recursive_counter += 1
+
+        for cell in board.board.flatten():
+            print(f"Updating blacklist for ({cell.row}, {cell.col})")
+            board.fill_blacklist(cell)
+
+        self.enablePrint()
+        print(f"\r\nRecursion number: {self.recursive_counter}\nnaked singles: {self.naked_singles_counter}\n\r{board}", end='\r')
+        self.blockPrint()
+        
+        while self.naked_single(board):
             pass
 
-        if row == 8 and col == 9:
+        if self.invalid:
+            self.invalid = False
+            return False
+        
+        if board.find_empty_cell(False) is None:
             return True
-        
-        if col == 9:
-            row += 1
-            col = 0
 
-        if board.board[row][col].num > 0:
-            return self.fill_board(row, col+1, board)
+        row, col = board.find_empty_cell()
+        examine_cell = board.board[row][col]
         
-        for i in range(1, 10, 1):
+        for i in examine_cell.candidates:
+            print(f"Trying number {i} cell ({row}, {col})")
+            print(board)
 
             if self.num_allowed(board, row, col, i):
+                board.set_num(board.board[row][col], i)
 
-                board.board[row][col].num = i
-
-                if self.fill_board(row, col + 1, board):
+                if self.recursive_solve(board):
                     return True
+                    
+                print("that search failed. backtracking..")
+                board.set_num(board.board[row][col], 0)
 
-            board.board[row][col].num = 0
+                # we set the number and update blacklists but because this is done cell by cell
+                # the first cells to be checked have an out of date blacklist so we run this twice before
+                # clearing just to ensure blacklists are up to date before backtracking.
+
+                for cell in self.changed_cells:
+                    print(f"Setting ({cell.row}, {cell.col}) to 0")
+                    board.set_num(cell, 0)
+
+                self.changed_cells.clear()
+
+                if self.invalid:
+                    self.invalid = False
+                    return False
+                
+                break
 
         return False
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # def num_allowed(self, board: Board, row, col, num):
-
-    #     for i in range(9):
-
-    #         if board.board[row][i] == num:
-    #             return False 
-        
-    #     for i in range(9):
-
-    #         if board.board[i][col] == num:
-
-    #             return False
-            
-    #     blockID = board.board[row][col].block
-
-    #     blocks = board.blocks[blockID]
-
-    #     for block in blocks:
-
-    #         for val in block:
-
-    #             if num == val:
-    #                 return False
-            
-    #     return True
-
-    # def fill_board(self, row, col, board: Board):
-
-    #     if row == 8 and col == 9:
-    #         return True
-        
-    #     if col == 9:
-    #         row += 1
-    #         col = 0
-
-    #     if board.board[row][col] > 0:
-    #         return self.fill_board(row, col+1, board)
-        
-    #     for i in range(1, 10, 1):
-
-    #         if self.num_allowed(board, row, col, i):
-
-    #             board.board[row][col].num = i
-
-    #             if self.fill_board(row, col + 1, board):
-    #                 return True
-
-    #         board.board[row][col].num = 0
-
-    #     return False
-        
-    # def generate_solvable(self):
-
-        board = Board()
-        test = Tests()
-        util = BoardUtils()
-        util.update(board)
-
-        print(board.board)
-
-        board.board[randint(0, 8)][randint(0, 8)].num = randint(1, 9)
-
-        return board
-
-        # for i in range(81):
-
-        #     row = i%9
-        #     col = randint(0, 8)
-
-        #     number = randint(1, 9)
-
-        #     if self.num_allowed(board, row, col, number):
-            
-        #         board.board[i%9][col].num = number
-
-        #     else:
-        #         continue
-
-        # if self.fill_board(0, 0, board):
-
-        #     return board
-        
-        # else:
-        #     return self.generate_solvable()
         
 
-                    
+    def solve_board(self, board: Board):
+
+        while True:
+
+            # Attempt to solve recursively
+            if self.recursive_solve(board):
+                break
+        
+        self.enablePrint()
+        print(f"\n\nSolution:\n\n{board}")
 
     
 

@@ -87,6 +87,12 @@ class BoardUtils:
         """
 
     def update(self, board: Board):
+        """
+        updates variables for:
+        board.rows
+        board.columns
+        board.blocks
+        """
         
         board.rows = [board.board[i, :] for i in range(9)]
 
@@ -107,15 +113,19 @@ class BoardUtils:
         
         return Cell(num, block, position)
 
-    def str_to_board(self, board: Board):
-        
-        sudoku_list = []
-        print("Input sudoku array (9, 9x1 arrays)")
-        for i in range(9):
+    def str_to_board(self, board: Board, sudoku_list: list = []):
+     
+        if sudoku_list == []:
+            print("Input sudoku array (9, 9x1 arrays)")
+            for i in range(9):
 
-            row = eval(input())
+                row = eval(input())
 
-            sudoku_list.append(row)
+                sudoku_list.append(row)
+
+        # Iterate through each number and transform it into a cell object.
+        # idx: an int representing which row we are on
+        # col: an int representing which column we are on
 
         for idx, row in enumerate(board.board):
 
@@ -125,3 +135,27 @@ class BoardUtils:
 
                 row[col] = self.generate_cell(sudoku_list[idx][col], position)
 
+        self.update(board)
+                
+        # Once all cells have been generated, reiterate and fill their blacklists.
+        # we can save computation by a fraction if we just run fill_blacklist on the first
+        # cell of each block. this is because fill_blacklist will fill the blacklist of each adjacent
+        # cell in the block.
+
+
+        for row in board.board:
+            for cell in row:
+                board.fill_blacklist(cell)
+
+    def get_board_from_input(self):
+        board = []
+        for i in range(9):
+            row = input(f"Enter row {i+1} of the Sudoku board (9 numbers, 0 for blanks): ")
+            row = [int(num) for num in row]
+            board.append(row)
+
+        print("The board you have entered:\n")
+        for r in board:
+            print(r)
+
+        return board

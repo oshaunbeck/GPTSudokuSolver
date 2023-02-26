@@ -12,12 +12,28 @@ class Cell():
 
         self.col = self.position[1]
 
+        self.possible_values = {1, 2, 3, 4, 5, 6, 7, 8, 9}
+
         self.blacklist = set()
 
-        self.candidates = set(range(1, 10)) if self.num == 0 else set()
 
-    def has_candidate(self, digit):
-        return digit in self.candidates
+    @property
+    def candidates(self):
+        return self.possible_values - self.blacklist
+    
+    @property
+    def info(self):
+
+        return f"""
+        Num:   {self.num}
+        Position: {self.position}
+        Row:    {self.row}
+        Column: {self.col}
+        Block:  {self.block}
+        Blacklist:  {self.blacklist}
+        Candidates: {self.candidates}
+        """
+
 
     def __repr__(self):
 
@@ -31,17 +47,7 @@ class Cell():
 
     def __gt__(self, other):
         return self.num > other
+    
 
-    def info(self):
 
-        return f"""
-        
-        Num:   {self.num}
-        Position: {self.position}
-        Row:    {self.row}
-        Column: {self.col}
-        Block:  {self.block}
-        Blacklist:  {self.blacklist}
-
-        """
 

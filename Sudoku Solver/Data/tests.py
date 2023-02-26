@@ -17,6 +17,8 @@ class Tests():
 [0, 0, 0, 0, 0, 0, 0, 7, 4],
 [0, 0, 5, 2, 0, 6, 3, 0, 0]
 ])
+        
+        #self.TEST_BOARD_2 = np.array()
         self.TEST_SOLUTION_1 = np.array([
 [3, 1, 6, 5, 7, 8, 4, 9, 2],
 [5, 2, 9, 1, 3, 4, 7, 6, 8],
@@ -37,46 +39,6 @@ class Tests():
         if np.array_equal(board.board, self.TEST_SOLUTION_1):   return True
             
         else:    return False
-
-    # BLACKLIST METHODS:
-
-    # These all have the same intention - iterate through a row, column or block to find
-    # and append numbers to a cells blacklist.
-
-    def row_blacklist(self, cell: Cell, board: Board):
-
-        for c in board.board[cell.row, :]:
-            if c.num == 0:
-                return False
-            else:
-                cell.blacklist.add(c.num)
-
-    def col_blacklist(self, cell: Cell, board: Board):
-
-        for c in board.board[:, cell.col]:
-            if c.num == 0:
-                return False
-            else:
-                cell.blacklist.add(c.num)
-
-    def block_blacklist(self, cell: Cell, board: Board):
-
-        block = board.blocks[cell.block]
-
-        for row in block:
-
-            for col in range(3):
-                
-                if row[col] == 0:
-                    return False
-                else:
-                    cell.blacklist.add(row[col].num)
-
-    def fill_blacklist(self, cell: Cell, board: Board):
-
-        self.row_blacklist(cell, board)
-        self.col_blacklist(cell, board)
-        self.block_blacklist(cell, board)
 
     def validity(self, board: Board):
 
